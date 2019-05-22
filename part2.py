@@ -1,6 +1,7 @@
 import os, json, math
 
 CORPUS_PATH = "corpus/derlem.txt"
+QA_PATH = "corpus/soru_gruplari.txt"
 punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
 DOCUMENT_NUMBER = 0
 
@@ -85,10 +86,6 @@ def Sentence2TfIdf(s):
         tfidf_s[word] = tf[word] * idf[word]
     return tfidf_s
     
-
-
-
-
 def cosine_prox(dict1, dict2): # inner product of two dictionaries
     sum = 0.0 
     for word in dict1.keys():
@@ -96,10 +93,55 @@ def cosine_prox(dict1, dict2): # inner product of two dictionaries
             sum += dict1[word] * dict2[word]
     return sum
 
-ReadCorpus(CORPUS_PATH)
+def read_qa(path):
+    qa = {}
+    with open(path, "r", encoding="utf-16") as f:
+        corpus = f.read()
 
+    for qas in corpus.split("\n\n"):
+        qas = qas.split("\n")
+        answer = qas[len(qas) - 2]
+        paragraph = qas[len(qas) - 1]
+        for line in qas[:len(qas) - 2]:
+            qa[line[:line.find(":")]] = [line[line.find(":") + 2:], answer[answer.find(":") + 2:], paragraph[paragraph.find(":") + 2:]]
+    return qa
+
+    """
+    for line in corpus.split("\n\n"):
+        if line[0] == "S":
+            qa[line[:line.find(":")]] =   line[line.find(":") + 2: line.find("\n")]      
+    print(qa)
+    """
+
+ReadCorpus(CORPUS_PATH)
+qa = read_qa(QA_PATH)
+print(qa["S426"])
+
+t = 0
+f = 0
+print("qa time")
+
+for key in qa.keys():
+    scores = {}
+    for id in tf_idf.keys(): 
+        scores[id] = cosine_prox(Sentence2TfIdf(qa[key][0]), tf_idf[id])
+    
+    sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
+    sorted_x.reverse()
+    print(key)
+    print(qa[key][2])
+    print(sorted_x[0][0])
+    if sorted_x[0][0] == qa[key][2]:
+        t = t + 1
+    else:
+        f = f + 1
+print(t)
+print(f)
 # CreateFiles()
 
+
+
+"""
 Q = input("Type your question (To stop type END)")
 
 while Q != "END":
@@ -112,3 +154,5 @@ while Q != "END":
     sorted_x.reverse()
 
     print([x[0] for x in sorted_x[:10]])
+    Q = input("Type your question (To stop type END)")
+"""
