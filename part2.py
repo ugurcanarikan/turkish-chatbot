@@ -7,20 +7,26 @@ GLOVE_PATH = 'glove/'
 QA_PATH = "corpus/soru_gruplari.txt"
 punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
 
-def createFiles(tf, df, tf_idf):
-    for f, fname in zip([tf,df,tf_idf],["tf.json", "df.json", "tf_idf.json"]):
-        o = open(os.path.join("weights", fname), "w", encoding="utf-16")
-        o.write(json.dumps(f, indent=4, sort_keys=True))
-        o.close()
+def createFiles(weights_path, tf, df, tf_idf, doc_num):
+    with open(weights_path + 'tf.json', 'w+', encoding="utf-16") as f1:  
+        json.dump(tf, f1)
+    with open(weights_path + 'df.json', 'w+', encoding="utf-16") as f2:  
+        json.dump(df, f2)
+    with open(weights_path + 'tf_idf.json', 'w+', encoding="utf-16") as f3:  
+        json.dump(tf_idf, f3)
+    with open(weights_path + 'doc_num.json', 'w+', encoding="utf-16") as f4:  
+        json.dump(doc_num, f4)
 
 def loadFiles(weights_path):
-    with open(weights_path + 'tf.json') as f1:  
+    with open(weights_path + 'tf.json', encoding="utf-16") as f1:  
         tf = json.load(f1)
-    with open(weights_path + 'df.json') as f2:  
+    with open(weights_path + 'df.json', encoding="utf-16") as f2:  
         df = json.load(f2)
-    with open(weights_path + 'tf_idf.json') as f3:  
+    with open(weights_path + 'tf_idf.json', encoding="utf-16") as f3:  
         tf_idf = json.load(f3)
-    return tf_idf, tf, df
+    with open(weights_path + 'doc_num.json', encoding="utf-16") as f4:  
+        doc_num = json.load(f4)
+    return tf, df, tf_idf, doc_num
 
 def freq(df, paragraph):
     term_freq = {}
@@ -40,11 +46,11 @@ def calculateTfIdf(tf, df, doc_num):
     for paragraph_id in tf.keys():
         w = {} # score dictionary
         length = 0.0 # length of the tf.idf vector
-        for word in df.keys():
+        for word in tf[paragraph_id].keys():
             tf_ = 0
             idf = math.log10(doc_num/df[word])
             
-            if word in tf[paragraph_id]:
+            if word in tf[paragraph_id].keys():
                 tf_ = 1 + math.log10(tf[paragraph_id][word])
             
             score = tf_ * idf
@@ -145,37 +151,78 @@ def loadGloveModel(gloveFile):
     print("Done.",len(model)," words loaded!")
     return model
 
-def find_paragraph(df, tf_idf, doc_num, sentence):
+def get_doc_embeddings(path, vector, tf_idf):
+    docs = {}
+    corpus = open(path, "r", encoding="utf-16")
+    for line in corpus:
+        if line == "\n":
+            continue
+        for c in punctuations:
+            line = line.replace(c, " ")
+        line = line.lower()
+        paragraph_id, paragraph = line.split(maxsplit=1)
+        embedding = [0.0 for i in range(300)]
+        for word in paragraph.split():
+            try:
+                embedding += vector[word] * tf_idf[paragraph_id][word]
+            except Exception:
+                pass
+                #print(word)
+        embedding = [x / len(paragraph.split()) for x in embedding]
+        docs[paragraph_id] = embedding
+    return docs
+
+def get_sentence_embedding(sentence, tfidf_s):
+    for c in punctuations:
+        sentence = sentence.replace(c, " ")
+    sentence = sentence.lower()
+    embedding = [0.0 for i in range(300)]
+    for word in sentence.split():
+        try:
+            embedding += vector[word] * tfidf_s[word]
+        except Exception:
+            #print(word)
+            pass
+        embedding = [x / len(sentence.split()) for x in embedding]
+    return embedding
+
+def find_paragraph_with_embedding(docs, sentence, return_number):
+    scores = {}
+    for key in docs.keys(): 
+        scores[key] =  sum(i[0] * i[1] for i in zip(get_sentence_embedding(sentence), docs[key]))
+    
+    sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
+    sorted_x.reverse()
+    return sorted_x[0:return_number]
+
+def find_paragraph(df, tf_idf, doc_num, sentence, return_number):
     scores = {}
     for key in tf_idf.keys(): 
         scores[key] = cosine_similarity(sentence2TfIdf(df, doc_num, sentence), tf_idf[key])
     
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
-    return sorted_x[0][0]
-#vector = loadGloveModel(GLOVE_PATH + 'vectors.txt')
-#print(vector['ve'])
+    return sorted_x[0:return_number]
 
-tf_idf, tf, df, doc_num = readCorpus(CORPUS_PATH)
-#tf_idf, tf, df = loadFiles(WEIGHTS_PATH)
+
+#tf_idf, tf, df, doc_num = readCorpus(CORPUS_PATH)
 
 qa = read_qa(QA_PATH)
+#createFiles(WEIGHTS_PATH, tf, df, tf_idf)
+tf, df, tf_idf, doc_num = loadFiles(WEIGHTS_PATH)
 
 t = 0
 f = 0
-print("qa time")
-
 for key1 in qa.keys():
-    scores = {}
-    for key2 in tf_idf.keys(): 
-        scores[key2] = cosine_similarity(sentence2TfIdf(df, doc_num, qa[key1][0]), tf_idf[key2])
-    print(key1)
-    sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
-    sorted_x.reverse()
-    if sorted_x[0][0] == qa[key1][2]:
+    if qa[key1][2] in [x[0] for x in find_paragraph(df, tf_idf, doc_num, qa[key1][0], 1)]:
         t = t + 1
     else:
+        #print(qa[key1][2])
+        #print(find_paragraph(df, tf_idf, doc_num, qa[key1][0], 10))
         f = f + 1
+print(t)
+print(f)
 
-    print(t)
-    print(f)
+
+
+
