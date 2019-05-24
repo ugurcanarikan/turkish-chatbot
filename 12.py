@@ -1,17 +1,19 @@
 import os, json, math
+import sys
+import nltk
 import numpy as np
-from scipy import spatial
-import time
-import gensim 
 
 CORPUS_PATH = "corpus/derlem.txt"
 WEIGHTS_PATH = 'weights/'
 GLOVE_PATH = 'glove/'
 FASTTEXT_PATH = 'ft/'
-QA_PATH = "corpus/soru_gruplari.txt"
+QA_PATH = sys.argv[1] + 'soru_gruplari.txt'
+TASK1_PATH = sys.argv[2]
+TASK2_PATH = sys.argv[3]
+
 punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
 
-def createFiles(weights_path, tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding):
+def createFiles(weights_path, tf, df, tf_idf, doc_num, corpus_dict):
     with open(weights_path + 'tf.json', 'w+', encoding="utf-16") as f1:  
         json.dump(tf, f1)
     with open(weights_path + 'df.json', 'w+', encoding="utf-16") as f2:  
@@ -22,8 +24,6 @@ def createFiles(weights_path, tf, df, tf_idf, doc_num, corpus_dict, corpus_embed
         json.dump(doc_num, f4)
     with open(weights_path + 'corpus_dict.json', 'w+', encoding="utf-16") as f5:  
         json.dump(corpus_dict, f5)
-    with open(weights_path + 'corpus_embedding.json', 'w+', encoding="utf-16") as f6:  
-        json.dump(corpus_embedding, f6)
 
 def loadFiles(weights_path):
     with open(weights_path + 'tf.json', encoding="utf-16") as f1:  
@@ -36,10 +36,15 @@ def loadFiles(weights_path):
         doc_num = json.load(f4)
     with open(weights_path + 'corpus_dict.json', encoding="utf-16") as f5:  
         corpus_dict = json.load(f5)
-    with open(weights_path + 'corpus_embedding.json', encoding="utf-16") as f5:  
-        corpus_embedding = json.load(f5)
 
-    return tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding
+    return tf, df, tf_idf, doc_num, corpus_dict
+
+def tokenize(text):
+    punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
+    for c in punctuations:
+        text = text.replace(c, " ")
+    text = text.lower()
+    return text
 
 def freq(df, paragraph):
     term_freq = {}
@@ -81,11 +86,9 @@ def readCorpus(path):
     for line in corpus:
         if line == "\n":
             continue
-        for c in punctuations:
-            line = line.replace(c, " ")
-        line = line.lower()
         paragraph_id, paragraph = line.split(maxsplit=1)
         corpus_dict[paragraph_id] = paragraph
+        paragraph = tokenize(paragraph)
         tf[paragraph_id], df = freq(df, paragraph)
         doc_num += 1
     tf_idf, tf, df, doc_num = calculateTfIdf(tf, df, doc_num)
@@ -108,9 +111,7 @@ def sentence2TfIdf(df, doc_num, s):
     tfidf_s = {}
     tf = {}
     idf = {}
-    for c in punctuations:
-        s = s.replace(c, " ")
-    s = s.lower()
+    s = tokenize(s)
     word_count = len(s.split())
     #length = 0.0
     for word in s.split():
@@ -137,26 +138,28 @@ def cosine_similarity_dict(dict1, dict2): # inner product of two dictionaries
     result = 0.0 
     #lenght1 = np.linalg.norm(list(dict1.values()))
     #lenght2 = np.linalg.norm(list(dict2.values()))
+    #return 1 - spatial.distance.cosine(list1, list2)
     for word in dict1.keys():
         if word in dict2:
             result += dict1[word] * dict2[word]
     return result #/ (lenght1 * lenght2)
 
-def cosine_similarity_list(list1, list2):
-    if list1 == [0 for i in range(300)] or list2 == [0 for i in range(300)]:
-        return 0
-    return 1 - spatial.distance.cosine(list1, list2)
+def cosine_similarity_normalized_dict(dict1, dict2): # inner product of two dictionaries
+    result = 0.0 
+    lenght1 = np.linalg.norm(list(dict1.values()))
+    lenght2 = np.linalg.norm(list(dict2.values()))
+    #return 1 - spatial.distance.cosine(list1, list2)
+    for word in dict1.keys():
+        if word in dict2:
+            result += dict1[word] * dict2[word]
+    return result / (lenght1 * lenght2)
 
 def get_intersection(sentence1, sentence2):
-    for c in punctuations:
-        sentence1 = sentence1.replace(c, " ")
-        sentence2 = sentence2.replace(c, " ")
-    sentence1 = sentence1.lower()
-    sentence2 = sentence2.lower()
-    return list(set(sentence1.split()) & set(sentence2.split()))
+    return list(set(tokenize(sentence1).split()) & set(tokenize(sentence2).split()))
 
 def getBigrams(s):
     subset = []
+    s = tokenize(s)
     for i in range(len(s)-1):
         subset.append(s[i:i+2])
     return subset
@@ -164,11 +167,19 @@ def getBigrams(s):
 def intersect(list1,list2):
     return [value for value in list1 if value in list2]
 
+def intersect_with_jaccard(list1, list2):
+    intersection = []
+    for word1 in list1:
+        for word2 in list2:
+            if jaccard_similarity(word1, word2) >= (min(len(word1), len(word2)) * 0.06):
+                intersection.append(word1)
+    return intersection
+
 def union(list1, list2):
     return list(set(list1) | set(list2))
 
 def jaccard_similarity(s1, s2):
-    return len(intersect(getBigrams(s1),getBigrams(s2)))/len(union(getBigrams(s1),getBigrams(s2)))
+    return len(intersect(getBigrams(s1),getBigrams(s2))) / len(union(getBigrams(s1),getBigrams(s2)))
 
 def find_paragraph_dict(df, tf_idf, doc_num, sentence, return_number):
     scores = {}
@@ -179,81 +190,46 @@ def find_paragraph_dict(df, tf_idf, doc_num, sentence, return_number):
     sorted_x.reverse()
     return sorted_x[0:return_number]
 
-def find_paragraph_list(corpus_embedding, sentence, return_number):
+def find_answer(corpus_dict, df, tf_idf, doc_num, question):
+    paragraph_ids = find_paragraph_dict(df, tf_idf, doc_num, question, 25)
+    question = tokenize(question)
     scores = {}
-    for key in corpus_embedding.keys(): 
-        scores[key] = cosine_similarity_list(corpus_embedding[key], get_embeddings(model, sentence))
-    
+    for paragraph_id in [x[0] for x in paragraph_ids]:
+        paragraph = corpus_dict[paragraph_id]
+        sent_text = nltk.sent_tokenize(paragraph) # this gives us a list of sentences
+        for sentence in sent_text:
+            scores[sentence] = cosine_similarity_normalized_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question)) * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
-    return sorted_x[0:return_number]
+    response = sorted_x[0][0]
+    response = tokenize(response)
+    intersection = intersect_with_jaccard(nltk.word_tokenize(response), nltk.word_tokenize(tokenize(question)))
+    for intersect in intersection:
+        response = response.replace(intersect, ' ')
+    return response
 
 def find_paragraphs_dict(df, tf_idf, qa, doc_num):
     t = 0
     f = 0
     for key in qa.keys():
-        if qa[key][2] in [x[0] for x in find_paragraph_dict(df, tf_idf, doc_num, qa[key][0], 1)]:
+        if qa[key][2] in [x[0] for x in find_paragraph_dict(df, tf_idf, doc_num, qa[key][0], 15)]:
             t = t + 1
         else:
             f = f + 1
         print('true' + str(t))
         print(f)
 
-def find_paragraphs_list(corpus_embedding, qa):
-    t = 0
-    f = 0
-    print('started finding paragraphs')
-    for key in qa.keys():
-        if qa[key][2] in [x[0] for x in find_paragraph_list(corpus_embedding, qa[key][0], 1)]:
-            t = t + 1
-        else:
-            f = f + 1
-        print('finding paragraph of Q ' + str(list(qa.keys()).index(key)) + ' / ' + str(len(qa.keys())), end="\r")
 
-        print('true' + str(t))
-        print(f)
-
-def get_embeddings(model, text):
-    for word in sentence.split():
-        word_embedding = [x for x in model[word]]
-        embedding = [x + y for x, y in zip(token_embedding, embedding)]
-    embedding = [x / len(sentence.tokens) for x in embedding]
-    if embedding == [0 for i in range(300)]:
-        print(text)
-    return embedding
-
-def get_corpus_embeddings(model, corpus_dict, tf_idf):
-    corpus_embedding = {}
-    for key in list(corpus_dict.keys()):
-        embedding = [0.0 for i in range(300)]
-        for word in corpus_dict[key].split():
-            word_embedding = [x * tf_idf[key][word] for x in get_embeddings(model, word)]
-            embedding = [x + y for x, y in zip(word_embedding, embedding)]
-        embedding = [x / len(corpus_dict[key]) for x in embedding]
-        corpus_embedding[key] = embedding
-        print(str(list(corpus_dict.keys()).index(key)) + ' / ' + str(len(corpus_dict.keys())) + ' of document embeddings have been created ', end="\r")
-    print('document embeddings have been created successfully')
-    return corpus_embedding
-    
-'''
-model = gensim.models.KeyedVectors.load_word2vec_format(FASTTEXT_PATH + 'cc.tr.300.vec', binary=False)
-print(model['ve'])
-print(type(model['ve']).__name__)
-print(len(model['ve']))
-'''
 #tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
-#qa = read_qa(QA_PATH)
-#corpus_embedding = get_corpus_embeddings(model, corpus_dict, tf_idf)
-#createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding)
-#tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding = loadFiles(WEIGHTS_PATH)
-#find_paragraph_list(corpus_embedding, qa['S2083'][0], 1)
-#find_paragraph_list(corpus_embedding, qa['S1007'][0], 1)
-#find_paragraphs_list(corpus_embedding, qa)
+qa = read_qa(QA_PATH)
+#createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
+tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
 
-
-
-
-
+#find_paragraphs_dict(df, tf_idf, qa, doc_num)
+print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S1571'][0]))
+#print(len(union(getBigrams('araba'),getBigrams('nehri'))))
+#print(intersect_with_jaccard(['iklimi'], ['iklim']))
+#print(jaccard_similarity('nehir', 'nehri'))
 
 
 
