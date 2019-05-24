@@ -1,12 +1,13 @@
 import os, json, math
 import numpy as np
 from scipy import spatial
-import flair
 import time
+import gensim 
 
 CORPUS_PATH = "corpus/derlem.txt"
 WEIGHTS_PATH = 'weights/'
 GLOVE_PATH = 'glove/'
+FASTTEXT_PATH = 'ft/'
 QA_PATH = "corpus/soru_gruplari.txt"
 punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
 
@@ -142,7 +143,17 @@ def cosine_similarity_dict(dict1, dict2): # inner product of two dictionaries
     return result #/ (lenght1 * lenght2)
 
 def cosine_similarity_list(list1, list2):
+    if list1 == [0 for i in range(300)] or list2 == [0 for i in range(300)]:
+        return 0
     return 1 - spatial.distance.cosine(list1, list2)
+
+def get_intersection(sentence1, sentence2):
+    for c in punctuations:
+        sentence1 = sentence1.replace(c, " ")
+        sentence2 = sentence2.replace(c, " ")
+    sentence1 = sentence1.lower()
+    sentence2 = sentence2.lower()
+    return list(set(sentence1.split()) & set(sentence2.split()))
 
 
 def find_paragraph_dict(df, tf_idf, doc_num, sentence, return_number):
@@ -171,8 +182,8 @@ def find_paragraphs_dict(df, tf_idf, qa, doc_num):
             t = t + 1
         else:
             f = f + 1
-    print(t)
-    print(f)
+        print('true' + str(t))
+        print(f)
 
 def find_paragraphs_list(corpus_embedding, qa):
     t = 0
@@ -185,24 +196,23 @@ def find_paragraphs_list(corpus_embedding, qa):
             f = f + 1
         print('finding paragraph of Q ' + str(list(qa.keys()).index(key)) + ' / ' + str(len(qa.keys())), end="\r")
 
-        print(t)
+        print('true' + str(t))
         print(f)
 
 def get_embeddings(model, text):
-    sentence = flair.data.Sentence(text)
-    model.embed(sentence)
-    embedding = sentence.tokens[0].embedding.tolist()
-    for token in sentence.tokens[1:]:
-        token_embedding = [x for x in token.embedding.tolist()]
+    for word in sentence.split():
+        word_embedding = [x for x in model[word]]
         embedding = [x + y for x, y in zip(token_embedding, embedding)]
     embedding = [x / len(sentence.tokens) for x in embedding]
+    if embedding == [0 for i in range(300)]:
+        print(text)
     return embedding
 
 def get_corpus_embeddings(model, corpus_dict, tf_idf):
     corpus_embedding = {}
     for key in list(corpus_dict.keys()):
-        embedding = get_embeddings(model, corpus_dict[key].split()[0])
-        for word in corpus_dict[key].split()[1:]:
+        embedding = [0.0 for i in range(300)]
+        for word in corpus_dict[key].split():
             word_embedding = [x * tf_idf[key][word] for x in get_embeddings(model, word)]
             embedding = [x + y for x, y in zip(word_embedding, embedding)]
         embedding = [x / len(corpus_dict[key]) for x in embedding]
@@ -210,17 +220,21 @@ def get_corpus_embeddings(model, corpus_dict, tf_idf):
         print(str(list(corpus_dict.keys()).index(key)) + ' / ' + str(len(corpus_dict.keys())) + ' of document embeddings have been created ', end="\r")
     print('document embeddings have been created successfully')
     return corpus_embedding
-
-model = flair.embeddings.WordEmbeddings('tr')
-
+'''
+model = gensim.models.KeyedVectors.load_word2vec_format(FASTTEXT_PATH + 'cc.tr.300.vec', binary=False)
+print(model['ve'])
+print(type(model['ve']).__name__)
+print(len(model['ve']))
+'''
 #tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
-qa = read_qa(QA_PATH)
+#qa = read_qa(QA_PATH)
 #corpus_embedding = get_corpus_embeddings(model, corpus_dict, tf_idf)
 #createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding)
-tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding = loadFiles(WEIGHTS_PATH)
-find_paragraphs_list(corpus_embedding, qa)
-
-
+#tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding = loadFiles(WEIGHTS_PATH)
+#find_paragraph_list(corpus_embedding, qa['S2083'][0], 1)
+#find_paragraph_list(corpus_embedding, qa['S1007'][0], 1)
+#find_paragraphs_list(corpus_embedding, qa)
+print(get_intersection('araba ve ev','sdf araba dsfsdcerc Araba, Ev'))
 
 
 
