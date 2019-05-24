@@ -1,5 +1,8 @@
 import os, json, math
 import numpy as np
+from scipy import spatial
+import flair
+import time
 
 CORPUS_PATH = "corpus/derlem.txt"
 WEIGHTS_PATH = 'weights/'
@@ -7,7 +10,7 @@ GLOVE_PATH = 'glove/'
 QA_PATH = "corpus/soru_gruplari.txt"
 punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
 
-def createFiles(weights_path, tf, df, tf_idf, doc_num):
+def createFiles(weights_path, tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding):
     with open(weights_path + 'tf.json', 'w+', encoding="utf-16") as f1:  
         json.dump(tf, f1)
     with open(weights_path + 'df.json', 'w+', encoding="utf-16") as f2:  
@@ -16,6 +19,10 @@ def createFiles(weights_path, tf, df, tf_idf, doc_num):
         json.dump(tf_idf, f3)
     with open(weights_path + 'doc_num.json', 'w+', encoding="utf-16") as f4:  
         json.dump(doc_num, f4)
+    with open(weights_path + 'corpus_dict.json', 'w+', encoding="utf-16") as f5:  
+        json.dump(corpus_dict, f5)
+    with open(weights_path + 'corpus_embedding.json', 'w+', encoding="utf-16") as f6:  
+        json.dump(corpus_embedding, f6)
 
 def loadFiles(weights_path):
     with open(weights_path + 'tf.json', encoding="utf-16") as f1:  
@@ -26,7 +33,12 @@ def loadFiles(weights_path):
         tf_idf = json.load(f3)
     with open(weights_path + 'doc_num.json', encoding="utf-16") as f4:  
         doc_num = json.load(f4)
-    return tf, df, tf_idf, doc_num
+    with open(weights_path + 'corpus_dict.json', encoding="utf-16") as f5:  
+        corpus_dict = json.load(f5)
+    with open(weights_path + 'corpus_embedding.json', encoding="utf-16") as f5:  
+        corpus_embedding = json.load(f5)
+
+    return tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding
 
 def freq(df, paragraph):
     term_freq = {}
@@ -55,24 +67,14 @@ def calculateTfIdf(tf, df, doc_num):
             
             score = tf_ * idf
             w[word] = score
-            '''
-            length += w[word]**2
-            
-            if score > 0.1: # threshold
-                w[word] = score
-                
-        
-        length = math.sqrt(length)
-        
-        for word in w.keys(): # normalization
-            w[word] = w[word]/length 
-        '''
+
         tf_idf[paragraph_id] = w # add it to the tf_idf
     return tf_idf, tf, df, doc_num
 
 def readCorpus(path):
     tf = {}
     df = {}
+    corpus_dict = {}
     doc_num = 0
     corpus = open(path, "r", encoding="utf-16")
     for line in corpus:
@@ -82,9 +84,11 @@ def readCorpus(path):
             line = line.replace(c, " ")
         line = line.lower()
         paragraph_id, paragraph = line.split(maxsplit=1)
+        corpus_dict[paragraph_id] = paragraph
         tf[paragraph_id], df = freq(df, paragraph)
         doc_num += 1
-    return calculateTfIdf(tf, df, doc_num)
+    tf_idf, tf, df, doc_num = calculateTfIdf(tf, df, doc_num)
+    return tf_idf, tf, df, doc_num, corpus_dict
 
 def read_qa(path):
     qa = {}
@@ -128,100 +132,101 @@ def sentence2TfIdf(df, doc_num, s):
         tfidf_s[word] = tfidf_s[word]#/length 
     return tfidf_s
     
-def cosine_similarity(dict1, dict2): # inner product of two dictionaries
+def cosine_similarity_dict(dict1, dict2): # inner product of two dictionaries
     result = 0.0 
-    '''
-    lenght1 = np.linalg.norm(list(dict1.values()))
-    lenght2 = np.linalg.norm(list(dict2.values()))
-    '''
+    #lenght1 = np.linalg.norm(list(dict1.values()))
+    #lenght2 = np.linalg.norm(list(dict2.values()))
     for word in dict1.keys():
         if word in dict2:
             result += dict1[word] * dict2[word]
     return result #/ (lenght1 * lenght2)
 
-def loadGloveModel(gloveFile):
-    print("Loading Glove Model")
-    f = open(gloveFile,'r')
-    model = {}
-    for line in f:
-        splitLine = line.split()
-        word = splitLine[0]
-        embedding = np.array([float(val) for val in splitLine[1:]])
-        model[word] = embedding
-    print("Done.",len(model)," words loaded!")
-    return model
+def cosine_similarity_list(list1, list2):
+    return 1 - spatial.distance.cosine(list1, list2)
 
-def get_doc_embeddings(path, vector, tf_idf):
-    docs = {}
-    corpus = open(path, "r", encoding="utf-16")
-    for line in corpus:
-        if line == "\n":
-            continue
-        for c in punctuations:
-            line = line.replace(c, " ")
-        line = line.lower()
-        paragraph_id, paragraph = line.split(maxsplit=1)
-        embedding = [0.0 for i in range(300)]
-        for word in paragraph.split():
-            try:
-                embedding += vector[word] * tf_idf[paragraph_id][word]
-            except Exception:
-                pass
-                #print(word)
-        embedding = [x / len(paragraph.split()) for x in embedding]
-        docs[paragraph_id] = embedding
-    return docs
 
-def get_sentence_embedding(sentence, tfidf_s):
-    for c in punctuations:
-        sentence = sentence.replace(c, " ")
-    sentence = sentence.lower()
-    embedding = [0.0 for i in range(300)]
-    for word in sentence.split():
-        try:
-            embedding += vector[word] * tfidf_s[word]
-        except Exception:
-            #print(word)
-            pass
-        embedding = [x / len(sentence.split()) for x in embedding]
-    return embedding
-
-def find_paragraph_with_embedding(docs, sentence, return_number):
-    scores = {}
-    for key in docs.keys(): 
-        scores[key] =  sum(i[0] * i[1] for i in zip(get_sentence_embedding(sentence), docs[key]))
-    
-    sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
-    sorted_x.reverse()
-    return sorted_x[0:return_number]
-
-def find_paragraph(df, tf_idf, doc_num, sentence, return_number):
+def find_paragraph_dict(df, tf_idf, doc_num, sentence, return_number):
     scores = {}
     for key in tf_idf.keys(): 
-        scores[key] = cosine_similarity(sentence2TfIdf(df, doc_num, sentence), tf_idf[key])
+        scores[key] = cosine_similarity_dict(sentence2TfIdf(df, doc_num, sentence), tf_idf[key])
     
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
     return sorted_x[0:return_number]
 
+def find_paragraph_list(corpus_embedding, sentence, return_number):
+    scores = {}
+    for key in corpus_embedding.keys(): 
+        scores[key] = cosine_similarity_list(corpus_embedding[key], get_embeddings(model, sentence))
+    
+    sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
+    sorted_x.reverse()
+    return sorted_x[0:return_number]
 
-#tf_idf, tf, df, doc_num = readCorpus(CORPUS_PATH)
+def find_paragraphs_dict(df, tf_idf, qa, doc_num):
+    t = 0
+    f = 0
+    for key in qa.keys():
+        if qa[key][2] in [x[0] for x in find_paragraph_dict(df, tf_idf, doc_num, qa[key][0], 1)]:
+            t = t + 1
+        else:
+            f = f + 1
+    print(t)
+    print(f)
 
+def find_paragraphs_list(corpus_embedding, qa):
+    t = 0
+    f = 0
+    print('started finding paragraphs')
+    for key in qa.keys():
+        if qa[key][2] in [x[0] for x in find_paragraph_list(corpus_embedding, qa[key][0], 1)]:
+            t = t + 1
+        else:
+            f = f + 1
+        print('finding paragraph of Q ' + str(list(qa.keys()).index(key)) + ' / ' + str(len(qa.keys())), end="\r")
+
+        print(t)
+        print(f)
+
+def get_embeddings(model, text):
+    sentence = flair.data.Sentence(text)
+    model.embed(sentence)
+    embedding = sentence.tokens[0].embedding.tolist()
+    for token in sentence.tokens[1:]:
+        token_embedding = [x for x in token.embedding.tolist()]
+        embedding = [x + y for x, y in zip(token_embedding, embedding)]
+    embedding = [x / len(sentence.tokens) for x in embedding]
+    return embedding
+
+def get_corpus_embeddings(model, corpus_dict, tf_idf):
+    corpus_embedding = {}
+    for key in list(corpus_dict.keys()):
+        embedding = get_embeddings(model, corpus_dict[key].split()[0])
+        for word in corpus_dict[key].split()[1:]:
+            word_embedding = [x * tf_idf[key][word] for x in get_embeddings(model, word)]
+            embedding = [x + y for x, y in zip(word_embedding, embedding)]
+        embedding = [x / len(corpus_dict[key]) for x in embedding]
+        corpus_embedding[key] = embedding
+        print(str(list(corpus_dict.keys()).index(key)) + ' / ' + str(len(corpus_dict.keys())) + ' of document embeddings have been created ', end="\r")
+    print('document embeddings have been created successfully')
+    return corpus_embedding
+
+model = flair.embeddings.WordEmbeddings('tr')
+
+#tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
 qa = read_qa(QA_PATH)
-#createFiles(WEIGHTS_PATH, tf, df, tf_idf)
-tf, df, tf_idf, doc_num = loadFiles(WEIGHTS_PATH)
+#corpus_embedding = get_corpus_embeddings(model, corpus_dict, tf_idf)
+#createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding)
+tf, df, tf_idf, doc_num, corpus_dict, corpus_embedding = loadFiles(WEIGHTS_PATH)
+find_paragraphs_list(corpus_embedding, qa)
 
-t = 0
-f = 0
-for key1 in qa.keys():
-    if qa[key1][2] in [x[0] for x in find_paragraph(df, tf_idf, doc_num, qa[key1][0], 1)]:
-        t = t + 1
-    else:
-        #print(qa[key1][2])
-        #print(find_paragraph(df, tf_idf, doc_num, qa[key1][0], 10))
-        f = f + 1
-print(t)
-print(f)
+
+
+
+
+
+
+
 
 
 
