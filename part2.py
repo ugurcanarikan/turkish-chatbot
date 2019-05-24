@@ -155,6 +155,20 @@ def get_intersection(sentence1, sentence2):
     sentence2 = sentence2.lower()
     return list(set(sentence1.split()) & set(sentence2.split()))
 
+def getBigrams(s):
+    subset = []
+    for i in range(len(s)-1):
+        subset.append(s[i:i+2])
+    return subset
+
+def intersect(list1,list2):
+    return [value for value in list1 if value in list2]
+
+def union(list1, list2):
+    return list(set(list1) | set(list2))
+
+def jaccard_similarity(s1, s2):
+    return len(intersect(getBigrams(s1),getBigrams(s2)))/len(union(getBigrams(s1),getBigrams(s2)))
 
 def find_paragraph_dict(df, tf_idf, doc_num, sentence, return_number):
     scores = {}
@@ -220,6 +234,7 @@ def get_corpus_embeddings(model, corpus_dict, tf_idf):
         print(str(list(corpus_dict.keys()).index(key)) + ' / ' + str(len(corpus_dict.keys())) + ' of document embeddings have been created ', end="\r")
     print('document embeddings have been created successfully')
     return corpus_embedding
+    
 '''
 model = gensim.models.KeyedVectors.load_word2vec_format(FASTTEXT_PATH + 'cc.tr.300.vec', binary=False)
 print(model['ve'])
@@ -234,9 +249,6 @@ print(len(model['ve']))
 #find_paragraph_list(corpus_embedding, qa['S2083'][0], 1)
 #find_paragraph_list(corpus_embedding, qa['S1007'][0], 1)
 #find_paragraphs_list(corpus_embedding, qa)
-print(get_intersection('araba ve ev','sdf araba dsfsdcerc Araba, Ev'))
-
-
 
 
 
