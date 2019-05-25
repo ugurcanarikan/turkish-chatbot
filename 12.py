@@ -7,7 +7,7 @@ CORPUS_PATH = "corpus/derlem.txt"
 WEIGHTS_PATH = 'weights/'
 GLOVE_PATH = 'glove/'
 FASTTEXT_PATH = 'ft/'
-QA_PATH = sys.argv[1] + 'soru_gruplari.txt'
+QA_PATH = sys.argv[1]
 TASK1_PATH = sys.argv[2]
 TASK2_PATH = sys.argv[3]
 
@@ -38,7 +38,7 @@ def loadFiles(weights_path):
     return tf, df, tf_idf, doc_num, corpus_dict
 
 def tokenize(text):
-    punctuations = "\"'’`“”‘!^%<+~*;:(?&}]|,)-#@/$_{.>[\="
+    punctuations = "\"'’`“”‘!^%<+~*;:(?&}]|,)-#@/$_{.>[\\="
     for c in punctuations:
         text = text.replace(c, " ")
     text = text.lower()
@@ -46,7 +46,7 @@ def tokenize(text):
     return text
 
 def tokenize_for_answer(text):
-    punctuations = "\"“”‘!^%<+~*;:(?&}]|,)-#@/$_{.>[\="
+    punctuations = "\"“”‘!^%<+~*;:(?&}]|,)-#@/$_{.>[\\="
     for c in punctuations:
         text = text.replace(c, " ")
     text = text.lower()
@@ -148,6 +148,14 @@ def read_qa(path):
         paragraph = qas[len(qas) - 1]
         for line in qas[:len(qas) - 2]:
             qa[line[:line.find(":")]] = [line[line.find(":") + 2:], answer[answer.find(":") + 2:], paragraph[paragraph.find(":") + 2:]]
+    return qa
+
+def read_questions(path):
+    qa = []
+    with open(path, "r", encoding="utf-16") as f:
+        corpus = f.read()
+    for line in corpus.split('\n'):
+        qa.append(line)
     return qa
 
 def sentence2TfIdf(df, doc_num, s):
@@ -257,23 +265,9 @@ def find_answer(corpus_dict, df, tf_idf, doc_num, question):
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
     response = sorted_x[0][0]
-    '''
-    print(response)
-    response = tokenize(response)
-    intersection = intersect_with_jaccard(nltk.word_tokenize(response), nltk.word_tokenize(tokenize(question)))
-    print(intersection)
-    for intersect in intersection:
-        response = response.replace(' ' + intersect + ' ', ' ')
-        if intersection.index(intersect) == 0:
-            response = response.replace(intersect + ' ', ' ')
-        elif intersection.index(intersect) == len(intersection) - 1:
-            response = response.replace(' ' + intersect, ' ')
-    response = tokenize(response)
-    return response
-    '''
     return remove_question(tokenize_for_answer(response), tokenize_for_answer(question), sorted_x[0][1][1])
 
-def find_answers(corpus_dict, df, tf_idf, qa, doc_num):
+def find_answers_dict(corpus_dict, df, tf_idf, qa, doc_num):
     results = ''
     for key in qa.keys():
         results += find_answer(corpus_dict, df, tf_idf, doc_num, qa[key][0])[0] + '\n'
@@ -282,32 +276,49 @@ def find_answers(corpus_dict, df, tf_idf, qa, doc_num):
     with open(TASK2_PATH + '12.txt', 'w+', encoding="utf-16") as f:  
         f.write(results)
 
-def remove_question(answer, question, paragraph_id):
-    answer = answer.split()
-    question = question.split()
-    response = [word for word in answer if tf_idf[paragraph_id][word] > 1.5]
-    
-    return " ".join(response), paragraph_id
-
 def find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num):
     t = 0
     f = 0
     results = ''
     for key in qa.keys():
         results += [x[0] for x in find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, qa[key][0], 1)][0] + '\n'
-        print('task 1 ' + str(list(qa.keys()).index(key)) + ' / ' + str(len(qa.keys())), end='\r')
+        #print('task 1 ' + str(list(qa.keys()).index(key)) + ' / ' + str(len(qa.keys())), end='\r')
+        if qa[key][2] in [x[0] for x in find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, qa[key][0], 1)]:
+            t += 1
+        else:
+            f += 1
+        print('true ' + str(t))
+        print('false ' + str(f))
+    print('task 1 complete')
+    
+
+def find_answers(corpus_dict, df, tf_idf, qa, doc_num):
+    results = ''
+    for question in qa:
+        results += find_answer(corpus_dict, df, tf_idf, doc_num, question)[0] + '\n'
+        print('task 2 ' + str(qa.index(question)) + ' / ' + str(len(qa)), end='\r')
+    print('task 2 complete')
+    with open(TASK2_PATH + '12.txt', 'w+', encoding="utf-16") as f:  
+        f.write(results)
+
+def find_paragraphs(corpus_dict, df, tf_idf, qa, doc_num):
+    t = 0
+    f = 0
+    results = ''
+    for question in qa:
+        results += [x[0] for x in find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, question, 1)][0] + '\n'
+        print('task 1 ' + str(qa.index(question)) + ' / ' + str(len(qa)), end='\r')
     print('task 1 complete')
     with open(TASK1_PATH + '12.txt', 'w+', encoding="utf-16") as f:  
         f.write(results)
-        '''
-        if qa[key][2] in [x[0] for x in find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, qa[key][0], 1)]:
-        #if qa[key][2] in find_answer(corpus_dict, df, tf_idf, doc_num, qa[key][0])[1]:
-            t = t + 1
-        else:
-            f = f + 1
-        print('true' + str(t))
-        print(f)
-        '''
+       
+def remove_question(answer, question, paragraph_id):
+    stopwords = ['ve', 'veya', 'ile', 'da', 'de', 'ya', 'ki', 'denir', 'olur', ]
+    answer = answer.split()
+    response = [word for word in answer if tf_idf[paragraph_id][word] > 1.5]
+    response = [word for word in response if word not in stopwords]
+    return " ".join(response), paragraph_id
+
 
 def constuct_vocab(tf):
     vocab = {}
@@ -318,16 +329,23 @@ def constuct_vocab(tf):
     return vocab
 
 
-#tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
-qa = read_qa(QA_PATH)
-#createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
-tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
-find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num)
+tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
+#qa = read_qa(QA_PATH)
+qa = read_questions(QA_PATH)
+createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
+#tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
+find_paragraphs(corpus_dict, df, tf_idf, qa, doc_num)
 find_answers(corpus_dict, df, tf_idf, qa, doc_num)
+#find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num)
 '''
 vocab = constuct_vocab(tf)
-with open(WEIGHTS_PATH + 'vocab.json', 'w+', encoding="utf-16") as f1:  
-    json.dump(vocab, f1, indent=4)
+'''
+'''
+results = ''
+for key in qa.keys():
+    results += qa[key][0] + '\n'
+with open(CORPUS_PATH + 'test_sorulari.txt', 'w+', encoding="utf-16") as f1:  
+    f1.write(results)
 '''
 #find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num)
 #print(qa['S1007'][0])
