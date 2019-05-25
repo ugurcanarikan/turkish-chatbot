@@ -278,6 +278,7 @@ def remove_question(answer, question, paragraph_id):
     answer = answer.split()
     question = question.split()
     response = [word for word in answer if tf_idf[paragraph_id][word] > 1.5]
+    
     return " ".join(response), paragraph_id
 
 def find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num):
@@ -292,18 +293,26 @@ def find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num):
         print('true' + str(t))
         print(f)
 
+def constuct_vocab(tf):
+    vocab = {}
+    for doc_id in tf.keys():
+        for term in tf[doc_id]:
+            vocab.setdefault(term, 0)
+            vocab[term] += 1
+    return vocab
 
-tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
+
+#tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
 qa = read_qa(QA_PATH)
-createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
-#tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
+#createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
+tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
 
-#print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S907'][0]))
-#print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S41'][0]))
-
-#print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S2017'][0]))
-
-find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num)
+'''
+vocab = constuct_vocab(tf)
+with open(WEIGHTS_PATH + 'vocab.json', 'w+', encoding="utf-16") as f1:  
+    json.dump(vocab, f1, indent=4)
+'''
+#find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num)
 #print(qa['S1007'][0])
 #print()
 #print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S1007'][0]))
