@@ -11,8 +11,6 @@ QA_PATH = sys.argv[1] + 'soru_gruplari.txt'
 TASK1_PATH = sys.argv[2]
 TASK2_PATH = sys.argv[3]
 
-punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
-
 def createFiles(weights_path, tf, df, tf_idf, doc_num, corpus_dict):
     with open(weights_path + 'tf.json', 'w+', encoding="utf-16") as f1:  
         json.dump(tf, f1)
@@ -40,7 +38,7 @@ def loadFiles(weights_path):
     return tf, df, tf_idf, doc_num, corpus_dict
 
 def tokenize(text):
-    punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
+    punctuations = "\"’!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
     for c in punctuations:
         text = text.replace(c, " ")
     text = text.lower()
@@ -198,14 +196,18 @@ def find_answer(corpus_dict, df, tf_idf, doc_num, question):
         paragraph = corpus_dict[paragraph_id]
         sent_text = nltk.sent_tokenize(paragraph) # this gives us a list of sentences
         for sentence in sent_text:
-            scores[sentence] = cosine_similarity_normalized_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question)) * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
+            sentence = tokenize(sentence)
+            scores[sentence] = cosine_similarity_normalized_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question))# * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
     response = sorted_x[0][0]
+    print(response)
     response = tokenize(response)
     intersection = intersect_with_jaccard(nltk.word_tokenize(response), nltk.word_tokenize(tokenize(question)))
+    print(intersection)
     for intersect in intersection:
-        response = response.replace(intersect, ' ')
+        response = response.replace(' ' + intersect + ' ', ' ')
+    response = tokenize(response)
     return response
 
 def find_paragraphs_dict(df, tf_idf, qa, doc_num):
@@ -226,7 +228,9 @@ qa = read_qa(QA_PATH)
 tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
 
 #find_paragraphs_dict(df, tf_idf, qa, doc_num)
-print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S1571'][0]))
+print(qa['S41'][0])
+print()
+print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S41'][0]))
 #print(len(union(getBigrams('araba'),getBigrams('nehri'))))
 #print(intersect_with_jaccard(['iklimi'], ['iklim']))
 #print(jaccard_similarity('nehir', 'nehri'))
