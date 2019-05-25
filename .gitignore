@@ -1,3 +1,9 @@
 Output/df.json
 Output/tf.json
 Output/tf_idf.json
+weights/df.json
+weights/corpus_dict.json
+weights/doc_num.json
+weights/tf.json
+weights/tf_idf.json
+.gitignore

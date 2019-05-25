@@ -40,11 +40,25 @@ def loadFiles(weights_path):
     return tf, df, tf_idf, doc_num, corpus_dict
 
 def tokenize(text):
-    punctuations = "\"!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
+    punctuations = "\"!^%<+~*;:(?&}]|,)-#@/$_{.>[\="
     for c in punctuations:
         text = text.replace(c, " ")
     text = text.lower()
-    return text
+
+    response = []
+    for word in text.split():
+        if "'" in word:
+            response.append(word.split("'")[0])
+            #response += word.split("'")[0] + " "
+        elif '’' in word:
+            response.append(word.split('’')[0])
+            #response += word.split('’')[0] + " "
+        elif '`' in word:
+            response.append(word.split('`')[0])
+            #response += word.split('`')[0] + " "
+        else:
+            response.append(word)
+    return " ".join(response)
 
 def freq(df, paragraph):
     term_freq = {}
@@ -191,6 +205,7 @@ def find_paragraph_dict(df, tf_idf, doc_num, sentence, return_number):
     return sorted_x[0:return_number]
 
 def find_answer(corpus_dict, df, tf_idf, doc_num, question):
+    print(question)
     paragraph_ids = find_paragraph_dict(df, tf_idf, doc_num, question, 25)
     question = tokenize(question)
     scores = {}
@@ -198,37 +213,47 @@ def find_answer(corpus_dict, df, tf_idf, doc_num, question):
         paragraph = corpus_dict[paragraph_id]
         sent_text = nltk.sent_tokenize(paragraph) # this gives us a list of sentences
         for sentence in sent_text:
-            scores[sentence] = cosine_similarity_normalized_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question))# * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
+            scores[sentence] = (cosine_similarity_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question)), paragraph_id) # * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
     response = sorted_x[0][0]
-    print(response)
+    '''print(response)
     
     intersection = intersect_with_jaccard(nltk.word_tokenize(response), nltk.word_tokenize(tokenize(question)))
     for intersect in intersection:
         response = response.replace(intersect, ' ')
-    response = tokenize(response)
-    return response
+    response = tokenize(response)'''
+    return remove_question(tokenize(response), tokenize(question), sorted_x[0][1][1])
 
 def find_paragraphs_dict(df, tf_idf, qa, doc_num):
     t = 0
     f = 0
     for key in qa.keys():
-        if qa[key][2] in [x[0] for x in find_paragraph_dict(df, tf_idf, doc_num, qa[key][0], 15)]:
+        if qa[key][2] in [x[0] for x in find_paragraph_dict(df, tf_idf, doc_num, qa[key][0], 10)]:
             t = t + 1
         else:
             f = f + 1
         print('true' + str(t))
         print(f)
 
+def remove_question(answer, question, paragraph_id):
+    print(paragraph_id)
+    answer = answer.split()
+    question = question.split()
+    response = [word for word in answer if tf_idf[paragraph_id][word] > 1.5]
+    return " ".join(response)
+
 
 tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
 qa = read_qa(QA_PATH)
-createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
-#tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
+#createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
+tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
 
 #find_paragraphs_dict(df, tf_idf, qa, doc_num)
+print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S907'][0]))
 print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S41'][0]))
+print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S2017'][0]))
+
 #print(len(union(getBigrams('araba'),getBigrams('nehri'))))
 #print(intersect_with_jaccard(['iklimi'], ['iklim']))
 #print(jaccard_similarity('nehir', 'nehri'))
