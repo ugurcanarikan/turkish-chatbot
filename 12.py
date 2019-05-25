@@ -313,10 +313,12 @@ def find_paragraphs(corpus_dict, df, tf_idf, qa, doc_num):
         f.write(results)
        
 def remove_question(answer, question, paragraph_id):
-    stopwords = ['ve', 'veya', 'ile', 'da', 'de', 'ya', 'ki', 'denir', 'olur', ]
+    stopwords = ['ve', 'veya', 'ile', 'da', 'de', 'ya', 'ki', 'denir', 'olur', 'görsel', 'resim', 'hâle', 'yılında', 'görülür', 'ayrılır', 'bulunur', 'oluşturur', 'tanımlanır', 'verilir', 'edilir', 'ölçülür', 'oluşur', ]
     answer = answer.split()
     response = [word for word in answer if tf_idf[paragraph_id][word] > 1.5]
     response = [word for word in response if word not in stopwords]
+    response = [word for word in response if word[-3:] not in ['dir', 'dır', 'dur', 'dür', 'tır', 'tir', 'tur', 'tür']]
+    response = [word for word in response if word[-6:] not in ['ebilir', 'abilir']]
     return " ".join(response), paragraph_id
 
 
