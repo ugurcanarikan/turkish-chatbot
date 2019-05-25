@@ -38,15 +38,37 @@ def loadFiles(weights_path):
     return tf, df, tf_idf, doc_num, corpus_dict
 
 def tokenize(text):
-    punctuations = "\"’!^%<+~*;:(?&}]|,')-#`@/$_{.>[\="
+    punctuations = "\"'’`“”‘!^%<+~*;:(?&}]|,)-#@/$_{.>[\="
     for c in punctuations:
         text = text.replace(c, " ")
     text = text.lower()
+
     return text
+
+def tokenize_for_answer(text):
+    punctuations = "\"“”‘!^%<+~*;:(?&}]|,)-#@/$_{.>[\="
+    for c in punctuations:
+        text = text.replace(c, " ")
+    text = text.lower()
+
+    response = []
+    for word in text.split():
+        if "'" in word:
+            response.append(word.split("'")[0])
+            #response += word.split("'")[0] + " "
+        elif '’' in word:
+            response.append(word.split('’')[0])
+            #response += word.split('’')[0] + " "
+        elif '`' in word:
+            response.append(word.split('`')[0])
+            #response += word.split('`')[0] + " "
+        else:
+            response.append(word)
+    return " ".join(response)
 
 def freq(df, paragraph):
     term_freq = {}
-    for word in paragraph.split():
+    for word in nltk.word_tokenize(paragraph):
         if word in term_freq:
             term_freq[word] += 1
         else:
@@ -75,6 +97,28 @@ def calculateTfIdf(tf, df, doc_num):
         tf_idf[paragraph_id] = w # add it to the tf_idf
     return tf_idf, tf, df, doc_num
 
+def isNoise(text):
+    end_punctuations = ".?!"
+    noisyWords = ['nedir']
+    number_of_sentences = 0
+    #print(nltk.sent_tokenize(text))
+    #print(nltk.word_tokenize(text))
+    sentence_tokenized = nltk.sent_tokenize(text)
+    for sentence in sentence_tokenized:
+        if len(sentence) > 2:
+            number_of_sentences += 1
+    if number_of_sentences > 1:
+        return False
+    if text.upper() == text:
+        return True
+    if text[len(text) - 1] in end_punctuations:
+        return False
+    tokenized = nltk.word_tokenize(text)
+    for token in tokenized:
+        if token.lower() in noisyWords:
+            return True
+    return False
+
 def readCorpus(path):
     tf = {}
     df = {}
@@ -85,6 +129,7 @@ def readCorpus(path):
         if line == "\n":
             continue
         paragraph_id, paragraph = line.split(maxsplit=1)
+        #if not isNoise(paragraph):
         corpus_dict[paragraph_id] = paragraph
         paragraph = tokenize(paragraph)
         tf[paragraph_id], df = freq(df, paragraph)
@@ -110,7 +155,7 @@ def sentence2TfIdf(df, doc_num, s):
     tf = {}
     idf = {}
     s = tokenize(s)
-    word_count = len(s.split())
+    #word_count = len(s.split())
     #length = 0.0
     for word in s.split():
         tf.setdefault(word, 0)
@@ -179,42 +224,68 @@ def union(list1, list2):
 def jaccard_similarity(s1, s2):
     return len(intersect(getBigrams(s1),getBigrams(s2))) / len(union(getBigrams(s1),getBigrams(s2)))
 
-def find_paragraph_dict(df, tf_idf, doc_num, sentence, return_number):
+def find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, sentence, return_number):
     scores = {}
     for key in tf_idf.keys(): 
         scores[key] = cosine_similarity_dict(sentence2TfIdf(df, doc_num, sentence), tf_idf[key])
     
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
+    return_list = []
+    for i in range(len(sorted_x)):
+        #print(corpus_dict[sorted_x[i][0]])
+        #print(isNoise(corpus_dict[sorted_x[i][0]]))
+        if not isNoise(corpus_dict[sorted_x[i][0]]):
+            return_list.append(sorted_x[i])
+        if len(return_list) == return_number:
+            return return_list
+
     return sorted_x[0:return_number]
 
 def find_answer(corpus_dict, df, tf_idf, doc_num, question):
-    paragraph_ids = find_paragraph_dict(df, tf_idf, doc_num, question, 25)
-    question = tokenize(question)
+    paragraph_ids = find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, question, 1)
+    question = tokenize_for_answer(question)
     scores = {}
     for paragraph_id in [x[0] for x in paragraph_ids]:
         paragraph = corpus_dict[paragraph_id]
         sent_text = nltk.sent_tokenize(paragraph) # this gives us a list of sentences
         for sentence in sent_text:
-            sentence = tokenize(sentence)
-            scores[sentence] = cosine_similarity_normalized_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question))# * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
+            sentence = tokenize_for_answer(sentence)
+            #scores[sentence] = cosine_similarity_normalized_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question))# * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
+            scores[sentence] = (cosine_similarity_dict(sentence2TfIdf(df, doc_num, sentence), sentence2TfIdf(df, doc_num, question)), paragraph_id) # * math.sqrt(cosine_similarity_dict(sentence2TfIdf(df, doc_num, question), tf_idf[paragraph_id]))
+
     sorted_x = sorted(scores.items(), key=lambda kv: kv[1])
     sorted_x.reverse()
     response = sorted_x[0][0]
+    '''
     print(response)
     response = tokenize(response)
     intersection = intersect_with_jaccard(nltk.word_tokenize(response), nltk.word_tokenize(tokenize(question)))
     print(intersection)
     for intersect in intersection:
         response = response.replace(' ' + intersect + ' ', ' ')
+        if intersection.index(intersect) == 0:
+            response = response.replace(intersect + ' ', ' ')
+        elif intersection.index(intersect) == len(intersection) - 1:
+            response = response.replace(' ' + intersect, ' ')
     response = tokenize(response)
     return response
+    '''
+    return remove_question(tokenize_for_answer(response), tokenize_for_answer(question), sorted_x[0][1][1])
 
-def find_paragraphs_dict(df, tf_idf, qa, doc_num):
+
+def remove_question(answer, question, paragraph_id):
+    answer = answer.split()
+    question = question.split()
+    response = [word for word in answer if tf_idf[paragraph_id][word] > 1.5]
+    return " ".join(response), paragraph_id
+
+def find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num):
     t = 0
     f = 0
     for key in qa.keys():
-        if qa[key][2] in [x[0] for x in find_paragraph_dict(df, tf_idf, doc_num, qa[key][0], 15)]:
+        if qa[key][2] in [x[0] for x in find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, qa[key][0], 1)]:
+        #if qa[key][2] in find_answer(corpus_dict, df, tf_idf, doc_num, qa[key][0])[1]:
             t = t + 1
         else:
             f = f + 1
@@ -222,18 +293,20 @@ def find_paragraphs_dict(df, tf_idf, qa, doc_num):
         print(f)
 
 
-#tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
+tf_idf, tf, df, doc_num, corpus_dict = readCorpus(CORPUS_PATH)
 qa = read_qa(QA_PATH)
-#createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
-tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
+createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
+#tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
 
-#find_paragraphs_dict(df, tf_idf, qa, doc_num)
-print(qa['S41'][0])
-print()
-print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S41'][0]))
-#print(len(union(getBigrams('araba'),getBigrams('nehri'))))
-#print(intersect_with_jaccard(['iklimi'], ['iklim']))
-#print(jaccard_similarity('nehir', 'nehri'))
+#print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S907'][0]))
+#print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S41'][0]))
+
+#print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S2017'][0]))
+
+find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num)
+#print(qa['S1007'][0])
+#print()
+#print(find_answer(corpus_dict, df, tf_idf, doc_num, qa['S1007'][0]))
 
 
 
