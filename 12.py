@@ -273,6 +273,14 @@ def find_answer(corpus_dict, df, tf_idf, doc_num, question):
     '''
     return remove_question(tokenize_for_answer(response), tokenize_for_answer(question), sorted_x[0][1][1])
 
+def find_answers(corpus_dict, df, tf_idf, qa, doc_num):
+    results = ''
+    for key in qa.keys():
+        results += find_answer(corpus_dict, df, tf_idf, doc_num, qa[key][0])[0] + '\n'
+        print('task 2 ' + str(list(qa.keys()).index(key)) + ' / ' + str(len(qa.keys())), end='\r')
+    print('task 2 complete')
+    with open(TASK2_PATH + '12.txt', 'w+', encoding="utf-16") as f:  
+        f.write(results)
 
 def remove_question(answer, question, paragraph_id):
     answer = answer.split()
@@ -284,7 +292,14 @@ def remove_question(answer, question, paragraph_id):
 def find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num):
     t = 0
     f = 0
+    results = ''
     for key in qa.keys():
+        results += [x[0] for x in find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, qa[key][0], 1)][0] + '\n'
+        print('task 1 ' + str(list(qa.keys()).index(key)) + ' / ' + str(len(qa.keys())), end='\r')
+    print('task 1 complete')
+    with open(TASK1_PATH + '12.txt', 'w+', encoding="utf-16") as f:  
+        f.write(results)
+        '''
         if qa[key][2] in [x[0] for x in find_paragraph_dict(corpus_dict, df, tf_idf, doc_num, qa[key][0], 1)]:
         #if qa[key][2] in find_answer(corpus_dict, df, tf_idf, doc_num, qa[key][0])[1]:
             t = t + 1
@@ -292,6 +307,7 @@ def find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num):
             f = f + 1
         print('true' + str(t))
         print(f)
+        '''
 
 def constuct_vocab(tf):
     vocab = {}
@@ -306,7 +322,8 @@ def constuct_vocab(tf):
 qa = read_qa(QA_PATH)
 #createFiles(WEIGHTS_PATH, tf, df, tf_idf, doc_num, corpus_dict)
 tf, df, tf_idf, doc_num, corpus_dict = loadFiles(WEIGHTS_PATH)
-
+find_paragraphs_dict(corpus_dict, df, tf_idf, qa, doc_num)
+find_answers(corpus_dict, df, tf_idf, qa, doc_num)
 '''
 vocab = constuct_vocab(tf)
 with open(WEIGHTS_PATH + 'vocab.json', 'w+', encoding="utf-16") as f1:  
